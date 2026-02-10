@@ -15,7 +15,7 @@
         let compressedData = null;
         
         Module.onRuntimeInitialized = () => {
-            const compress_func = Module.cwrap('compress', 'number', ['number', 'number', 'number']);
+            const rleCompress = Module.cwrap('rleCompress', 'number', ['number', 'number', 'number']);
             
             window.compressFile = function() {
                 const file = document.getElementById('fileInput').files[0];
@@ -30,7 +30,7 @@
                     const outputPtr = Module._malloc(inputLen * 2);
                     
                     Module.HEAP8.set(data, inputPtr);
-                    const outputLen = compress_func(inputPtr, outputPtr, inputLen);
+                    const outputLen = rleCompress(inputPtr, outputPtr, inputLen);
                     
                     compressedData = Module.HEAP8.slice(outputPtr, outputPtr + outputLen);
                     
