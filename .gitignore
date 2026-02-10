@@ -1,0 +1,19 @@
+# Emscripten compiled outputs
+*.js
+*.wasm
+*.wasm.map
+*.js.map
+*.data
+
+# Keep source files
+!algorithms/*.cpp
+!compressor.cpp
+
+# Build directory
+build/
+
+# Node modules if you add any
+node_modules/
+
+# OS files
+.DS_Store
