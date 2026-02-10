@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WASM Compressor</title>
+</head>
+<body>
+    <h1>File Compressor</h1>
+    <input type="file" id="fileInput">
+    <button onclick="compressFile()">Compress</button>
+    <button onclick="downloadCompressed()" id="downloadBtn" style="display:none">Download</button>
+    <div id="output"></div>
+
+    <script src="compressor.js"></script>
+    <script>
+        let compressedData = null;
+        
+        Module.onRuntimeInitialized = () => {
+            const compress_func = Module.cwrap('compress', 'number', ['number', 'number', 'number']);
+            
+            window.compressFile = function() {
+                const file = document.getElementById('fileInput').files[0];
+                if (!file) return alert('Select a file first');
+                
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const data = new Uint8Array(e.target.result);
+                    const inputLen = data.length;
+                    
+                    const inputPtr = Module._malloc(inputLen);
+                    const outputPtr = Module._malloc(inputLen * 2);
+                    
+                    Module.HEAP8.set(data, inputPtr);
+                    const outputLen = compress_func(inputPtr, outputPtr, inputLen);
+                    
+                    compressedData = Module.HEAP8.slice(outputPtr, outputPtr + outputLen);
+                    
+                    document.getElementById('output').innerText = 
+                        `Original: ${inputLen} bytes\nCompressed: ${outputLen} bytes\nRatio: ${(outputLen/inputLen*100).toFixed(1)}%`;
+                    document.getElementById('downloadBtn').style.display = 'block';
+                    
+                    Module._free(inputPtr);
+                    Module._free(outputPtr);
+                };
+                reader.readAsArrayBuffer(file);
+            };
+            
+            window.downloadCompressed = function() {
+                const blob = new Blob([compressedData]);
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'compressed.bin';
+                a.click();
+            };
+        };
+    </script>
+</body>
+</html>
