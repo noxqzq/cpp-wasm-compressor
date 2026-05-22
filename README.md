@@ -4,8 +4,6 @@ Browser-based file compression tool using C++ and WebAssembly. Performs high-per
 
 ## Project Structure
 ```
-## Project Structure
-```
 wasm-compressor/
 ├── algorithms/
 │   ├── delta.cpp                # Delta Compression (Self-delta RLE or Huffman Chaining
@@ -21,7 +19,6 @@ wasm-compressor/
 ├── styles.css                   # Styling
 ├── .gitignore
 └── README.md
-```
 ```
 
 ## Use Instructions
