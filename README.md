@@ -4,16 +4,24 @@ Browser-based file compression tool using C++ and WebAssembly. Performs high-per
 
 ## Project Structure
 ```
+## Project Structure
+```
 wasm-compressor/
 ├── algorithms/
-│   ├── huffman_internal.h       # Huffman Internals (Functions for huffman.cpp and Zstd.cpp)
-│   ├── rle.cpp                  # Run-Length Encoding
-│   ├── lz77.cpp                 # LZ77 Dictionary Compression
+│   ├── delta.cpp                # Delta Compression (Self-delta RLE or Huffman Chaining
+│   │                                                 and Reference Delta)
+│   ├── huffman_internal.h       # Huffman Internals (shared by huffman.cpp and zstd.cpp)
 │   ├── huffman.cpp              # Huffman Encoding
-│   └── zstd.cpp                 # Zstandard Compression
+│   ├── lz77_internal.h          # LZ77 Internals (shared by lz77.cpp and zstd.cpp)
+│   ├── lz77.cpp                 # LZ77 Dictionary Compression
+│   ├── rle.cpp                  # Run-Length Encoding
+│   └── zstd.cpp                 # Zstandard-inspired Compression (LZ77 + Huffman)
 ├── index.html                   # Web interface
+├── scripts.js                   # UI logic
+├── styles.css                   # Styling
 ├── .gitignore
 └── README.md
+```
 ```
 
 ## Use Instructions
