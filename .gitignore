@@ -1,5 +1,5 @@
 # Emscripten compiled outputs
-*.js
+compression.js
 *.wasm
 *.wasm.map
 *.js.map
