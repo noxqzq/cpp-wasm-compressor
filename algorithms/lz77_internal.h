@@ -18,9 +18,9 @@
 //      0x01  → match follows: [len_minus1][dist_lo][dist_hi] (3 bytes)
 // =============================================================================
 
-#define LZ77_WINDOW_SIZE  4096
 #define LZ77_MIN_MATCH    3
-#define LZ77_MAX_MATCH    258
+#define LZ77_WINDOW_SIZE  32768   // was 4096
+#define LZ77_MAX_MATCH    65535   // was 258
 
 // Find the longest match in the sliding window.
 // Returns match length (0 if no match found), sets *matchDist.
