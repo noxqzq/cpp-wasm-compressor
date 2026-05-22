@@ -27,13 +27,16 @@ wasm-compressor/
 #### Compile to WebAssembly:
 
 ```
-emcc algorithms/rle.cpp algorithms/lz77.cpp algorithms/huffman.cpp \
-  -o compressor.js \
+emcc algorithms/rle.cpp algorithms/lz77.cpp algorithms/huffman.cpp algorithms/delta.cpp algorithms/zstd.cpp \
+  -O2 \
+  -I algorithms \
   -s WASM=1 \
-  -s EXPORTED_FUNCTIONS='["_rleCompress","_rleDecompress","_lz77Compress","_lz77Decompress","_huffmanCompress","_huffmanDecompress","_malloc","_free"]' \
-  -s EXPORTED_RUNTIME_METHODS='["cwrap","HEAPU8"]' \
+  -s MODULARIZE=1 \
+  -s EXPORT_NAME="CompressionModule" \
+  -s EXPORTED_FUNCTIONS='["_rleCompress","_rleDecompress","_lz77Compress","_lz77Decompress","_huffmanCompress","_huffmanDecompress","_deltaCompress","_deltaDecompress","_deltaCompressRef","_deltaDecompressRef","_zstdCompress","_zstdDecompress","_malloc","_free"]' \
+  -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPU8"]' \
   -s ALLOW_MEMORY_GROWTH=1 \
-  -O2
+  -o compression.js
 ```
 ---
 #### Start local server:

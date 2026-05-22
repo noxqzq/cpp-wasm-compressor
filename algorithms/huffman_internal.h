@@ -177,7 +177,7 @@ inline int huffmanCompressBuffer(const unsigned char* src, int srcLen, unsigned 
     freeTree(root);
 
     unsigned int bitBuffer = 0;
-    int          bitCount  = 0;
+    int bitCount  = 0;
     for (int i = 0; i < srcLen; i++) {
         unsigned char b = src[i];
         bitBuffer = (bitBuffer << codeLengths[b]) | codes[b];

@@ -2,105 +2,342 @@
 <html>
 <head>
     <title>WASM Compressor</title>
+    <link rel="stylesheet" href="styles.css">
     <style>
-        body { font-family: monospace; max-width: 600px; margin: 40px auto; padding: 0 20px; }
-        select, button { margin: 4px; padding: 6px 12px; }
-        #output { margin-top: 16px; white-space: pre; background: #f4f4f4; padding: 12px; border-radius: 4px; }
+        /* 5-column grid for the extra ZSTD button */
+        .algo-row { grid-template-columns: repeat(5, 1fr); }
     </style>
 </head>
 <body>
     <h1>WASM Compressor</h1>
 
-    <input type="file" id="fileInput"><br>
+    <!-- Algorithm selector -->
+    <div class="card">
+        <div class="label">Algorithm</div>
+        <div class="algo-row">
+            <button class="algo-btn active" data-algo="rle">RLE</button>
+            <button class="algo-btn" data-algo="lz77">LZ77</button>
+            <button class="algo-btn" data-algo="huffman">Huffman</button>
+            <button class="algo-btn" data-algo="zstd">ZSTD</button>
+            <button class="algo-btn" data-algo="delta">Delta</button>
+        </div>
+    </div>
 
-    <label>Algorithm:
-        <select id="algorithm">
-            <option value="rle">RLE</option>
-            <option value="lz77">LZ77</option>
-            <option value="huffman">Huffman</option>
-        </select>
-    </label><br>
+    <!-- Standard file input (non-delta) -->
+    <div class="card" id="standard-panel">
+        <div class="label">Input file</div>
+        <div class="file-drop" id="standard-drop">
+            <input type="file" id="fileInput">
+            <div class="drop-label">Drop file here or click to browse</div>
+            <div class="file-name" id="standard-filename"></div>
+        </div>
+        <div class="action-row">
+            <button class="action-btn primary" id="btn-compress" onclick="compressFile()" disabled>Compress</button>
+            <button class="action-btn" id="btn-decompress" onclick="decompressFile()" disabled>Decompress</button>
+        </div>
+    </div>
 
-    <button onclick="compressFile()">Compress</button>
-    <button onclick="decompressFile()">Decompress</button>
-    <button onclick="downloadResult()" id="downloadBtn" style="display:none">Download</button>
+    <!-- Delta-specific panel -->
+    <div class="card" id="delta-panel">
+        <div class="label">Delta mode</div>
+        <div class="delta-mode-row">
+            <button class="mode-btn active" id="mode-self" onclick="selectDeltaMode('self')">
+                <span class="mode-title">Self-delta</span>
+                <span class="mode-sub">One file only.<br>Encodes byte differences within the file.</span>
+            </button>
+            <button class="mode-btn" id="mode-ref" onclick="selectDeltaMode('ref')">
+                <span class="mode-title">Reference-delta</span>
+                <span class="mode-sub">Two files.<br>Diffs target against a reference file.</span>
+            </button>
+        </div>
 
-    <div id="output">Select a file and algorithm, then compress.</div>
+        <div class="label">Target file</div>
+        <div class="file-drop" id="delta-drop">
+            <input type="file" id="deltaFileInput">
+            <div class="drop-label">Drop target file or click to browse</div>
+            <div class="file-name" id="delta-filename"></div>
+        </div>
 
+        <div id="ref-file-section">
+            <div class="label" style="margin-top:12px">Reference file</div>
+            <div class="file-drop" id="ref-drop">
+                <input type="file" id="refFileInput">
+                <div class="drop-label">Drop reference file or click to browse</div>
+                <div class="file-name" id="ref-filename"></div>
+            </div>
+        </div>
+
+        <div class="chain-row">
+            <label>
+                <input type="checkbox" id="chainCheck">
+                Chain with
+            </label>
+            <select class="chain-select" id="chainAlgo">
+                <option value="huffman">Huffman</option>
+                <option value="rle">RLE</option>
+            </select>
+            <span style="color:var(--color-text-secondary,#666)">after delta</span>
+        </div>
+
+        <div class="action-row">
+            <button class="action-btn primary" onclick="deltaCompress()">Compress</button>
+            <button class="action-btn" onclick="deltaDecompress()">Decompress</button>
+        </div>
+    </div>
+
+    <!-- Output card -->
+    <div class="card" id="output-card">
+        <div class="label">Result</div>
+        <div class="pipeline-row" id="pipeline-row"></div>
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="stat-label">Original</div>
+                <div class="stat-value" id="stat-original">—</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Output</div>
+                <div class="stat-value" id="stat-output">—</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Ratio</div>
+                <div class="stat-value" id="stat-ratio">—</div>
+            </div>
+        </div>
+        <div class="delta-note" id="delta-note" style="display:none"></div>
+        <button class="action-btn primary" id="download-btn" onclick="downloadResult()">Download result</button>
+    </div>
+
+    <script>var Module = {};</script>
     <script src="compressor.js"></script>
     <script>
         let resultData = null;
+        let currentAlgo = 'rle';
+        let deltaMode = 'self';
 
-        Module.onRuntimeInitialized = () => {
+        // Algo selector
+        document.querySelectorAll('.algo-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.algo-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentAlgo = btn.dataset.algo;
+                const isDelta = currentAlgo === 'delta';
+                document.getElementById('standard-panel').style.display = isDelta ? 'none' : 'block';
+                document.getElementById('delta-panel').classList.toggle('visible', isDelta);
+                document.getElementById('output-card').classList.remove('visible');
+            });
+        });
+
+        function selectDeltaMode(mode) {
+            deltaMode = mode;
+            document.getElementById('mode-self').classList.toggle('active', mode === 'self');
+            document.getElementById('mode-ref').classList.toggle('active', mode === 'ref');
+            document.getElementById('ref-file-section').classList.toggle('visible', mode === 'ref');
+        }
+
+        // File name display
+        function bindFilename(inputId, displayId) {
+            document.getElementById(inputId).addEventListener('change', e => {
+                const f = e.target.files[0];
+                document.getElementById(displayId).textContent = f ? f.name : '';
+            });
+        }
+        bindFilename('fileInput', 'standard-filename');
+        bindFilename('deltaFileInput', 'delta-filename');
+        bindFilename('refFileInput', 'ref-filename');
+
+        // Drag-over styles
+        ['standard-drop','delta-drop','ref-drop'].forEach(id => {
+            const el = document.getElementById(id);
+            el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('drag-over'); });
+            el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+            el.addEventListener('drop', () => el.classList.remove('drag-over'));
+        });
+
+        function initModule() {
+            // Verify WASM exports are actually present before proceeding
+            if (typeof Module._rleCompress !== 'function') {
+                console.error('WASM exports not found — check compressor.js loaded correctly and EXPORTED_FUNCTIONS includes all symbols');
+                return;
+            }
+            document.getElementById('btn-compress').disabled   = false;
+            document.getElementById('btn-decompress').disabled = false;
+            const _rleC   = (i,o,n)       => Module._rleCompress(i,o,n);
+            const _rleD   = (i,o,n)       => Module._rleDecompress(i,o,n);
+            const _lzC    = (i,o,n)       => Module._lz77Compress(i,o,n);
+            const _lzD    = (i,o,n)       => Module._lz77Decompress(i,o,n);
+            const _hufC   = (i,o,n)       => Module._huffmanCompress(i,o,n);
+            const _hufD   = (i,o,n)       => Module._huffmanDecompress(i,o,n);
+            const _zstdC  = (i,o,n)       => Module._zstdCompress(i,o,n);
+            const _zstdD  = (i,o,n)       => Module._zstdDecompress(i,o,n);
+            const _dC     = (i,o,n)       => Module._deltaCompress(i,o,n);
+            const _dD     = (i,o,n)       => Module._deltaDecompress(i,o,n);
+            const _dRefC  = (s,r,o,sn,rn) => Module._deltaCompressRef(s,r,o,sn,rn);
+            const _dRefD  = (s,r,o,sn,rn) => Module._deltaDecompressRef(s,r,o,sn,rn);
+
             const fns = {
-                rle: {
-                    compress:   Module.cwrap('rleCompress',       'number', ['number','number','number']),
-                    decompress: Module.cwrap('rleDecompress',     'number', ['number','number','number']),
-                },
-                lz77: {
-                    compress:   Module.cwrap('lz77Compress',      'number', ['number','number','number']),
-                    decompress: Module.cwrap('lz77Decompress',    'number', ['number','number','number']),
-                },
-                huffman: {
-                    compress:   Module.cwrap('huffmanCompress',   'number', ['number','number','number']),
-                    decompress: Module.cwrap('huffmanDecompress', 'number', ['number','number','number']),
-                },
+                rle:     { compress: _rleC,   decompress: _rleD  },
+                lz77:    { compress: _lzC,    decompress: _lzD   },
+                huffman: { compress: _hufC,   decompress: _hufD  },
+                zstd:    { compress: _zstdC,  decompress: _zstdD },
+            };
+            const chainFns = {
+                huffman: { compress: _hufC, decompress: _hufD },
+                rle:     { compress: _rleC, decompress: _rleD },
             };
 
-            function readFile(callback) {
-                const file = document.getElementById('fileInput').files[0];
-                if (!file) return alert('Select a file first');
-                const reader = new FileReader();
-                reader.onload = e => callback(new Uint8Array(e.target.result));
-                reader.readAsArrayBuffer(file);
+            function readFileData(inputId) {
+                return new Promise((resolve, reject) => {
+                    const file = document.getElementById(inputId).files[0];
+                    if (!file) return reject(inputId);
+                    const r = new FileReader();
+                    r.onload = e => resolve(new Uint8Array(e.target.result));
+                    r.readAsArrayBuffer(file);
+                });
             }
 
-            function runWasm(fn, data) {
-                // Worst-case output buffer: Huffman header (516 b) + 2× input for literals
-                const outSize  = 516 + data.length * 2 + 64;
-                const inputPtr = Module._malloc(data.length);
-                const outputPtr = Module._malloc(outSize);
-
-                Module.HEAPU8.set(data, inputPtr);
-                const outputLen = fn(inputPtr, outputPtr, data.length);
-                const result = Module.HEAPU8.slice(outputPtr, outputPtr + outputLen);
-
-                Module._free(inputPtr);
-                Module._free(outputPtr);
+            function wasmRun(fn, data) {
+                // For decompression the output can be much larger than input.
+                // 8× gives safe headroom; ALLOW_MEMORY_GROWTH handles edge cases.
+                const outSize = 516 + data.length * 8 + 64;
+                const inPtr  = Module._malloc(data.length);
+                const outPtr = Module._malloc(outSize);
+                if (!inPtr || !outPtr) throw new Error('WASM malloc failed');
+                Module.HEAPU8.set(data, inPtr);
+                const len = fn(inPtr, outPtr, data.length);
+                const result = Module.HEAPU8.slice(outPtr, outPtr + len);
+                Module._free(inPtr);
+                Module._free(outPtr);
+                if (len === 0) throw new Error('WASM function returned 0 bytes — check input is valid compressed data');
                 return result;
             }
 
+            function wasmRunRef(fn, src, ref) {
+                const outSize = src.length + ref.length + 16;
+                const srcPtr = Module._malloc(src.length);
+                const refPtr = Module._malloc(ref.length);
+                const outPtr = Module._malloc(outSize);
+                Module.HEAPU8.set(src, srcPtr);
+                Module.HEAPU8.set(ref, refPtr);
+                const len = fn(srcPtr, refPtr, outPtr, src.length, ref.length);
+                const result = Module.HEAPU8.slice(outPtr, outPtr + len);
+                Module._free(srcPtr); Module._free(refPtr); Module._free(outPtr);
+                return result;
+            }
+
+            function showResult(original, output, pipeline, isDecompress) {
+                resultData = output;
+                const ratio = original.length > 0
+                    ? (output.length / original.length * 100).toFixed(1)
+                    : '0';
+                document.getElementById('stat-original').textContent = fmtBytes(original.length);
+                document.getElementById('stat-output').textContent   = fmtBytes(output.length);
+                document.getElementById('stat-ratio').textContent    = ratio + '%';
+
+                const pr = document.getElementById('pipeline-row');
+                pr.innerHTML = pipeline.map((s, i) =>
+                    `<span class="step">${s}</span>${i < pipeline.length - 1 ? '<span class="arrow">→</span>' : ''}`
+                ).join('');
+
+                const note = document.getElementById('delta-note');
+                if (currentAlgo === 'delta' && !document.getElementById('chainCheck').checked && !isDecompress) {
+                    note.style.display = 'block';
+                    note.textContent = 'Delta alone outputs ~100% of the original size — it reshapes data, not shrinks it. Enable "Chain with Huffman/RLE" above to get real compression.';
+                } else {
+                    note.style.display = 'none';
+                }
+
+                document.getElementById('output-card').classList.add('visible');
+            }
+
+            function fmtBytes(n) {
+                if (n < 1024)        return n + ' B';
+                if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+                return (n / (1024 * 1024)).toFixed(2) + ' MB';
+            }
+
+            // Standard compress/decompress (RLE, LZ77, Huffman, ZSTD)
             window.compressFile = function() {
-                readFile(data => {
-                    const algo = document.getElementById('algorithm').value;
-                    resultData = runWasm(fns[algo].compress, data);
-
-                    const ratio = data.length > 0
-                        ? (resultData.length / data.length * 100 - 1).toFixed(1)
-                        : 'N/A';
-
-                    document.getElementById('output').innerText =
-                        `Algorithm : ${algo.toUpperCase()}\n` +
-                        `Original  : ${data.length} bytes\n` +
-                        `Compressed: ${resultData.length} bytes\n` +
-                        `Ratio     : ${ratio}%`;
-
-                    document.getElementById('downloadBtn').style.display = 'inline';
+                readFileData('fileInput').then(data => {
+                    const out = wasmRun(fns[currentAlgo].compress, data);
+                    const label = currentAlgo === 'zstd' ? 'LZ77 → Huffman' : currentAlgo.toUpperCase();
+                    showResult(data, out, ['input', label, 'output'], false);
+                }).catch(err => {
+                    if (typeof err === 'string') alert('Select a file first');
+                    else { console.error(err); alert('Compression failed: ' + err.message); }
                 });
             };
 
             window.decompressFile = function() {
-                readFile(data => {
-                    const algo = document.getElementById('algorithm').value;
-                    resultData = runWasm(fns[algo].decompress, data);
-
-                    document.getElementById('output').innerText =
-                        `Algorithm    : ${algo.toUpperCase()}\n` +
-                        `Compressed   : ${data.length} bytes\n` +
-                        `Decompressed : ${resultData.length} bytes`;
-
-                    document.getElementById('downloadBtn').style.display = 'inline';
+                readFileData('fileInput').then(data => {
+                    const out = wasmRun(fns[currentAlgo].decompress, data);
+                    const label = currentAlgo === 'zstd'
+                        ? 'Huffman → LZ77 decode'
+                        : currentAlgo.toUpperCase() + ' decompress';
+                    showResult(data, out, ['input', label, 'output'], true);
+                }).catch(err => {
+                    if (typeof err === 'string') alert('Select a file first');
+                    else { console.error(err); alert('Decompression failed: ' + err.message); }
                 });
+            };
+
+            // Delta compress
+            window.deltaCompress = function() {
+                const chain     = document.getElementById('chainCheck').checked;
+                const chainAlgo = document.getElementById('chainAlgo').value;
+
+                readFileData('deltaFileInput').then(async srcData => {
+                    let deltaOut;
+                    let pipeline = ['input'];
+
+                    if (deltaMode === 'ref') {
+                        let refData;
+                        try { refData = await readFileData('refFileInput'); }
+                        catch { return alert('Select a reference file first'); }
+                        deltaOut = wasmRunRef(_dRefC, srcData, refData);
+                        pipeline.push('Δ ref-delta');
+                    } else {
+                        deltaOut = wasmRun(_dC, srcData);
+                        pipeline.push('Δ self-delta');
+                    }
+
+                    let finalOut = deltaOut;
+                    if (chain) {
+                        finalOut = wasmRun(chainFns[chainAlgo].compress, deltaOut);
+                        pipeline.push(chainAlgo.toUpperCase());
+                    }
+                    pipeline.push('output');
+                    showResult(srcData, finalOut, pipeline, false);
+                }).catch(() => alert('Select a target file first'));
+            };
+
+            // Delta decompress (reverse pipeline)
+            window.deltaDecompress = function() {
+                const chain     = document.getElementById('chainCheck').checked;
+                const chainAlgo = document.getElementById('chainAlgo').value;
+
+                readFileData('deltaFileInput').then(async srcData => {
+                    let pipeline  = ['input'];
+                    let unChained = srcData;
+
+                    if (chain) {
+                        unChained = wasmRun(chainFns[chainAlgo].decompress, srcData);
+                        pipeline.push(chainAlgo.toUpperCase() + ' decompress');
+                    }
+
+                    let finalOut;
+                    if (deltaMode === 'ref') {
+                        let refData;
+                        try { refData = await readFileData('refFileInput'); }
+                        catch { return alert('Select a reference file first'); }
+                        finalOut = wasmRunRef(_dRefD, unChained, refData);
+                        pipeline.push('Δ ref-delta decompress');
+                    } else {
+                        finalOut = wasmRun(_dD, unChained);
+                        pipeline.push('Δ self-delta decompress');
+                    }
+                    pipeline.push('output');
+                    showResult(srcData, finalOut, pipeline, true);
+                }).catch(() => alert('Select a file first'));
             };
 
             window.downloadResult = function() {
@@ -108,12 +345,17 @@
                 const blob = new Blob([resultData]);
                 const url  = URL.createObjectURL(blob);
                 const a    = document.createElement('a');
-                a.href     = url;
-                a.download = 'output.bin';
-                a.click();
+                a.href = url; a.download = 'output.bin'; a.click();
                 URL.revokeObjectURL(url);
             };
-        };
+        }
+
+        // Handle both cases: WASM already ready, or not yet
+        if (typeof Module !== 'undefined' && Module.calledRun) {
+            initModule();
+        } else {
+            Module.onRuntimeInitialized = initModule;
+        }
     </script>
 </body>
 </html>
