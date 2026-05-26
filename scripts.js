@@ -13,10 +13,12 @@ let wasmReady   = false;
 //    Real implementations are installed by initModule() once WASM is ready.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function compressFile()   { if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
-function decompressFile() { if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
-function deltaCompress()  { if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
-function deltaDecompress(){ if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
+function compressFile()      { if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
+function decompressFile()    { if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
+function deltaCompress()     { if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
+function deltaDecompress()   { if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
+function dctCompressFile()   { if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
+function dctDecompressFile() { if (!wasmReady) return showError('WASM still loading — please wait a moment and try again.'); }
 function downloadResult() { if (!resultData) return; _downloadResult(); }
 
 function _downloadResult() {
@@ -90,8 +92,10 @@ document.querySelectorAll('.algo-btn').forEach(btn => {
         btn.classList.add('active');
         currentAlgo = btn.dataset.algo;
         const isDelta = currentAlgo === 'delta';
-        document.getElementById('standard-panel').style.display = isDelta ? 'none' : 'block';
+        const isDCT   = currentAlgo === 'dct';
+        document.getElementById('standard-panel').style.display = (!isDelta && !isDCT) ? 'block' : 'none';
         document.getElementById('delta-panel').classList.toggle('visible', isDelta);
+        document.getElementById('dct-panel').style.display = isDCT ? 'block' : 'none';
         document.getElementById('output-card').classList.remove('visible');
     });
 });
@@ -123,9 +127,40 @@ bindFilename('fileInput',      'standard-filename');
 bindFilename('deltaFileInput', 'delta-filename');
 bindFilename('refFileInput',   'ref-filename');
 
+// ── Quality slider ────────────────────────────────────────────────────────────
+
+document.getElementById('quality-slider').addEventListener('input', e => {
+    document.getElementById('quality-val').textContent = e.target.value;
+});
+
+// ── DCT file input ────────────────────────────────────────────────────────────
+
+document.getElementById('dctFileInput').addEventListener('change', e => {
+    const f = e.target.files[0];
+    document.getElementById('dct-filename').textContent = f ? f.name : '';
+    document.getElementById('btn-dct-compress').disabled   = !f || !wasmReady;
+    document.getElementById('btn-dct-decompress').disabled = !f || !wasmReady;
+
+    // Show image preview for non-.dctz files
+    if (f && !f.name.endsWith('.dctz')) {
+        const img = new Image();
+        img.onload = () => {
+            const canvas = document.getElementById('dct-canvas');
+            canvas.width  = img.width;
+            canvas.height = img.height;
+            canvas.getContext('2d').drawImage(img, 0, 0);
+            document.getElementById('dct-preview-wrap').classList.add('visible');
+            URL.revokeObjectURL(img.src);
+        };
+        img.src = URL.createObjectURL(f);
+    } else {
+        document.getElementById('dct-preview-wrap').classList.remove('visible');
+    }
+});
+
 // ── Drag-over styles ──────────────────────────────────────────────────────────
 
-['standard-drop', 'delta-drop', 'ref-drop'].forEach(id => {
+['standard-drop', 'delta-drop', 'ref-drop', 'dct-drop'].forEach(id => {
     const el = document.getElementById(id);
     el.addEventListener('dragover',  e => { e.preventDefault(); el.classList.add('drag-over'); });
     el.addEventListener('dragleave', ()  => el.classList.remove('drag-over'));
@@ -169,6 +204,9 @@ function initModule() {
     const _dD     = (i, o, n)       => Module._deltaDecompress(i, o, n);
     const _dRefC  = (s, r, o, sn, rn) => Module._deltaCompressRef(s, r, o, sn, rn);
     const _dRefD  = (s, r, o, sn, rn) => Module._deltaDecompressRef(s, r, o, sn, rn);
+
+    const _dctC = (input, output, w, h, q) => Module._dctCompress(input, output, w, h, q);
+    const _dctD = (input, output, len, wPtr, hPtr) => Module._dctDecompress(input, output, len, wPtr, hPtr);
 
     const fns = {
         rle:     { compress: _rleC,  decompress: _rleD  },
@@ -325,6 +363,104 @@ function initModule() {
         }).catch(err => {
             if (err.message.startsWith('no-file')) showError('Select a file first.');
             else { console.error(err); showError('Delta decompression failed: ' + err.message); }
+        });
+    };
+    // ── DCT implementations ───────────────────────────────────────────────────
+
+    function readImagePixels(inputId) {
+        return new Promise((resolve, reject) => {
+            const file = document.getElementById(inputId).files[0];
+            if (!file) return reject(new Error('no-file:' + inputId));
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width; canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const px = ctx.getImageData(0, 0, img.width, img.height);
+                resolve({ data: new Uint8Array(px.data.buffer), width: img.width, height: img.height });
+                URL.revokeObjectURL(img.src);
+            };
+            img.onerror = () => reject(new Error('Could not load image'));
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    dctCompressFile = function() {
+        const quality = parseInt(document.getElementById('quality-slider').value, 10);
+
+        readImagePixels('dctFileInput').then(({ data, width, height }) => {
+            const inSize  = data.length;                        // width*height*4
+            const outSize = inSize * 3 + 512;                  // generous upper bound
+            const inPtr   = Module._malloc(inSize);
+            const outPtr  = Module._malloc(outSize);
+            if (!inPtr || !outPtr) throw new Error('WASM malloc failed');
+
+            try {
+                Module.HEAPU8.set(data, inPtr);
+                const t0  = performance.now();
+                const len = _dctC(inPtr, outPtr, width, height, quality);
+                const ms  = performance.now() - t0;
+                if (len === 0) throw new Error('DCT compress returned 0 bytes');
+
+                const out = Module.HEAPU8.slice(outPtr, outPtr + len);
+                showResult(data, out, ['RGBA input', 'YCbCr', 'DCT', 'Quantize', 'Huffman', 'output'], false, ms);
+            } finally {
+                Module._free(inPtr);
+                Module._free(outPtr);
+            }
+        }).catch(err => {
+            if (err.message.startsWith('no-file')) showError('Select an image file first.');
+            else { console.error(err); showError('DCT compression failed: ' + err.message); }
+        });
+    };
+
+    dctDecompressFile = function() {
+        new Promise((resolve, reject) => {
+            const file = document.getElementById('dctFileInput').files[0];
+            if (!file) return reject(new Error('no-file'));
+            const r = new FileReader();
+            r.onload  = e => resolve(new Uint8Array(e.target.result));
+            r.onerror = () => reject(new Error('File read error'));
+            r.readAsArrayBuffer(file);
+        }).then(data => {
+            const outSize = data.length * 12 + 64;   // RGBA can be much larger than compressed
+            const inPtr   = Module._malloc(data.length);
+            const outPtr  = Module._malloc(outSize);
+            const wPtr    = Module._malloc(4);
+            const hPtr    = Module._malloc(4);
+            if (!inPtr || !outPtr || !wPtr || !hPtr) throw new Error('WASM malloc failed');
+
+            try {
+                Module.HEAPU8.set(data, inPtr);
+                const t0  = performance.now();
+                const len = _dctD(inPtr, outPtr, data.length, wPtr, hPtr);
+                const ms  = performance.now() - t0;
+                if (len === 0) throw new Error('DCT decompress returned 0 — file may not be a .dctz compressed image');
+
+                const w   = Module.HEAP32[wPtr >> 2];
+                const h   = Module.HEAP32[hPtr >> 2];
+                const out = Module.HEAPU8.slice(outPtr, outPtr + len);
+
+                // Render result to the preview canvas
+                const canvas = document.getElementById('dct-canvas');
+                canvas.width = w; canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                const id  = ctx.createImageData(w, h);
+                id.data.set(out);
+                ctx.putImageData(id, 0, 0);
+                document.getElementById('dct-preview-wrap').classList.add('visible');
+
+                showResult(data, out, ['Huffman decode', 'Dequantize', 'IDCT', 'YCbCr→RGB', 'output'], true, ms);
+            } finally {
+                Module._free(inPtr);
+                Module._free(outPtr);
+                Module._free(wPtr);
+                Module._free(hPtr);
+            }
+        }).catch(err => {
+            if (err.message.startsWith('no-file')) showError('Select a .dctz compressed file first.');
+            else { console.error(err); showError('DCT decompression failed: ' + err.message); }
         });
     };
 }

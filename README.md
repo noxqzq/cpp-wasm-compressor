@@ -38,14 +38,16 @@ emcc \
   algorithms/huffman.cpp \
   algorithms/delta.cpp \
   algorithms/zstd.cpp \
+  algorithms/dct.cpp \
   -I algorithms \
-  -o compressor.js \
+  -o compression.js \
   -O2 \
   -s WASM=1 \
   -s MODULARIZE=0 \
-  -s EXPORTED_FUNCTIONS='["_malloc","_free","_rleCompress","_rleDecompress","_lz77Compress","_lz77Decompress","_huffmanCompress","_huffmanDecompress","_zstdCompress","_zstdDecompress","_deltaCompress","_deltaDecompress","_deltaCompressRef","_deltaDecompressRef"]' \
-  -s EXPORTED_RUNTIME_METHODS='["HEAPU8"]' \
-  -s ALLOW_MEMORY_GROWTH=1
+  -s EXPORTED_FUNCTIONS='["_malloc","_free","_rleCompress","_rleDecompress","_lz77Compress","_lz77Decompress","_huffmanCompress","_huffmanDecompress","_zstdCompress","_zstdDecompress","_deltaCompress","_deltaDecompress","_deltaCompressRef","_deltaDecompressRef","_dctCompress","_dctDecompress"]' \
+  -s EXPORTED_RUNTIME_METHODS='["HEAPU8","HEAP32"]' \
+  -s ALLOW_MEMORY_GROWTH=1 \
+  -lm
 ```
 ---
 #### Start local server:
