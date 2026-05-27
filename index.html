@@ -4,19 +4,6 @@
     <title>WASM Compressor</title>
     <link rel="stylesheet" href="styles.css">
     <style>
-        /* 6-column grid including DCT button */
-        .algo-row { grid-template-columns: repeat(6, 1fr); }
-
-        /* Quality slider */
-        #quality-slider { width: 100%; accent-color: var(--color-text-primary, #111); margin: 6px 0 2px; }
-        .quality-row { margin-top: 12px; }
-        .quality-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--color-text-secondary, #666); }
-
-        /* Image preview */
-        #dct-preview-wrap { margin-top: 14px; display: none; }
-        #dct-preview-wrap.visible { display: block; }
-        #dct-canvas { width: 100%; border-radius: 8px; border: 0.5px solid var(--color-border-tertiary, rgba(0,0,0,0.15)); display: block; }
-
         /* 4-column stat grid to accommodate the Time box */
         .stats-grid { grid-template-columns: repeat(4, 1fr); }
 
@@ -47,7 +34,6 @@
             <button class="algo-btn" data-algo="huffman">Huffman</button>
             <button class="algo-btn" data-algo="zstd">ZSTD</button>
             <button class="algo-btn" data-algo="delta">Delta</button>
-            <button class="algo-btn" data-algo="dct">DCT</button>
         </div>
     </div>
 
@@ -110,32 +96,6 @@
         <div class="action-row">
             <button class="action-btn primary" onclick="deltaCompress()">Compress</button>
             <button class="action-btn"          onclick="deltaDecompress()">Decompress</button>
-        </div>
-    </div>
-
-    <!-- DCT image panel -->
-    <div class="card" id="dct-panel" style="display:none">
-        <div class="label">Input image</div>
-        <div class="file-drop" id="dct-drop">
-            <input type="file" id="dctFileInput" accept="image/*">
-            <div class="drop-label">Drop PNG / JPEG / BMP or click to browse</div>
-            <div class="file-name" id="dct-filename"></div>
-        </div>
-
-        <div class="quality-row">
-            <div class="label">Quality — <span id="quality-val">75</span></div>
-            <input type="range" id="quality-slider" min="1" max="100" value="75">
-            <div class="quality-labels"><span>1 — smallest file</span><span>100 — best quality</span></div>
-        </div>
-
-        <div id="dct-preview-wrap">
-            <div class="label" style="margin-bottom:6px">Preview</div>
-            <canvas id="dct-canvas"></canvas>
-        </div>
-
-        <div class="action-row">
-            <button class="action-btn primary" id="btn-dct-compress"   onclick="dctCompressFile()"   disabled>Compress</button>
-            <button class="action-btn"          id="btn-dct-decompress" onclick="dctDecompressFile()" disabled>Decompress</button>
         </div>
     </div>
 

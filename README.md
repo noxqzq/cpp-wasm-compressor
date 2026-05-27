@@ -32,22 +32,15 @@ wasm-compressor/
 #### Compile to WebAssembly:
 
 ```
-emcc \
-  algorithms/rle.cpp \
-  algorithms/lz77.cpp \
-  algorithms/huffman.cpp \
-  algorithms/delta.cpp \
-  algorithms/zstd.cpp \
-  algorithms/dct.cpp \
+emcc algorithms/delta.cpp algorithms/huffman.cpp algorithms/lz77.cpp algorithms/rle.cpp algorithms/zstd.cpp \
   -I algorithms \
-  -o compression.js \
   -O2 \
   -s WASM=1 \
-  -s MODULARIZE=0 \
-  -s EXPORTED_FUNCTIONS='["_malloc","_free","_rleCompress","_rleDecompress","_lz77Compress","_lz77Decompress","_huffmanCompress","_huffmanDecompress","_zstdCompress","_zstdDecompress","_deltaCompress","_deltaDecompress","_deltaCompressRef","_deltaDecompressRef","_dctCompress","_dctDecompress"]' \
-  -s EXPORTED_RUNTIME_METHODS='["HEAPU8","HEAP32"]' \
+  -s EXPORTED_FUNCTIONS='["_malloc","_free","_rleCompress","_rleDecompress","_lz77Compress","_lz77Decompress","_huffmanCompress","_huffmanDecompress","_zstdCompress","_zstdDecompress","_deltaCompress","_deltaDecompress","_deltaCompressRef","_deltaDecompressRef"]' \
+  -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","HEAPU8","HEAPU32"]' \
   -s ALLOW_MEMORY_GROWTH=1 \
-  -lm
+  -s NO_EXIT_RUNTIME=1 \
+  -o compressor.js
 ```
 ---
 #### Start local server:
